@@ -174,20 +174,22 @@ func (w *bitgetWrapper) GetAccount(ctx context.Context) (*Account, error) {
 	positions := make([]*Position, len(bitgetAccount.Positions))
 	for i, pos := range bitgetAccount.Positions {
 		positions[i] = &Position{
-			Symbol:           pos.Symbol,
-			Size:             pos.Size,
-			EntryPrice:       pos.EntryPrice,
-			MarkPrice:        pos.MarkPrice,
-			UnrealizedPNL:    pos.UnrealizedPNL,
-			HasUnrealizedPNL: pos.HasUnrealizedPNL,
-			RealizedPNL:      pos.RealizedPNL,
-			HasRealizedPNL:   pos.HasRealizedPNL,
-			ClosedPNL:        pos.ClosedPNL,
-			FundingFee:       pos.FundingFee,
-			TradingFee:       pos.TradingFee,
-			Leverage:         pos.Leverage,
-			MarginType:       pos.MarginType,
-			IsolatedMargin:   pos.IsolatedMargin,
+			Symbol:              pos.Symbol,
+			Size:                pos.Size,
+			EntryPrice:          pos.EntryPrice,
+			MarkPrice:           pos.MarkPrice,
+			UnrealizedPNL:       pos.UnrealizedPNL,
+			HasUnrealizedPNL:    pos.HasUnrealizedPNL,
+			RealizedPNL:         pos.RealizedPNL,
+			HasRealizedPNL:      pos.HasRealizedPNL,
+			ClosedPNL:           pos.ClosedPNL,
+			FundingFee:          pos.FundingFee,
+			TradingFee:          pos.TradingFee,
+			Leverage:            pos.Leverage,
+			MarginType:          pos.MarginType,
+			IsolatedMargin:      pos.IsolatedMargin,
+			LiquidationPrice:    pos.LiquidationPrice,
+			HasLiquidationPrice: pos.HasLiquidationPrice,
 		}
 	}
 
@@ -209,20 +211,22 @@ func (w *bitgetWrapper) GetPositions(ctx context.Context, symbol string) ([]*Pos
 	positions := make([]*Position, len(bitgetPositions))
 	for i, pos := range bitgetPositions {
 		positions[i] = &Position{
-			Symbol:           pos.Symbol,
-			Size:             pos.Size,
-			EntryPrice:       pos.EntryPrice,
-			MarkPrice:        pos.MarkPrice,
-			UnrealizedPNL:    pos.UnrealizedPNL,
-			HasUnrealizedPNL: pos.HasUnrealizedPNL,
-			RealizedPNL:      pos.RealizedPNL,
-			HasRealizedPNL:   pos.HasRealizedPNL,
-			ClosedPNL:        pos.ClosedPNL,
-			FundingFee:       pos.FundingFee,
-			TradingFee:       pos.TradingFee,
-			Leverage:         pos.Leverage,
-			MarginType:       pos.MarginType,
-			IsolatedMargin:   pos.IsolatedMargin,
+			Symbol:              pos.Symbol,
+			Size:                pos.Size,
+			EntryPrice:          pos.EntryPrice,
+			MarkPrice:           pos.MarkPrice,
+			UnrealizedPNL:       pos.UnrealizedPNL,
+			HasUnrealizedPNL:    pos.HasUnrealizedPNL,
+			RealizedPNL:         pos.RealizedPNL,
+			HasRealizedPNL:      pos.HasRealizedPNL,
+			ClosedPNL:           pos.ClosedPNL,
+			FundingFee:          pos.FundingFee,
+			TradingFee:          pos.TradingFee,
+			Leverage:            pos.Leverage,
+			MarginType:          pos.MarginType,
+			IsolatedMargin:      pos.IsolatedMargin,
+			LiquidationPrice:    pos.LiquidationPrice,
+			HasLiquidationPrice: pos.HasLiquidationPrice,
 		}
 	}
 

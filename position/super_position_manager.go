@@ -14,6 +14,7 @@ import (
 
 	"nexus-trade-bot/config"
 	"nexus-trade-bot/logger"
+	"nexus-trade-bot/safety"
 	"nexus-trade-bot/utils"
 )
 
@@ -209,6 +210,12 @@ type SuperPositionManager struct {
 	lastEntryWindowSync        time.Time
 	pendingEntryWindowSyncKey  string
 	pendingEntryWindowSyncSeen time.Time
+
+	entryRiskGuard interface {
+		CheckEntryOrders(ctx context.Context, orders []safety.GridRiskOrder, markPrice float64, snapshot safety.GridRiskSnapshot) safety.GridRiskDecision
+		IsTriggered() bool
+		LastReason() string
+	}
 }
 
 // NewSuperPositionManager 创建超级仓位管理器
@@ -234,6 +241,16 @@ func NewSuperPositionManager(cfg *config.Config, executor OrderExecutorInterface
 	spm.lastMarketPrice.Store(0.0)
 	spm.haltCond = sync.NewCond(&spm.haltMu)
 	return spm
+}
+
+func (spm *SuperPositionManager) SetEntryRiskGuard(guard interface {
+	CheckEntryOrders(ctx context.Context, orders []safety.GridRiskOrder, markPrice float64, snapshot safety.GridRiskSnapshot) safety.GridRiskDecision
+	IsTriggered() bool
+	LastReason() string
+}) {
+	spm.mu.Lock()
+	defer spm.mu.Unlock()
+	spm.entryRiskGuard = guard
 }
 
 func (spm *SuperPositionManager) tradingDirection() string {
@@ -1131,8 +1148,23 @@ func (spm *SuperPositionManager) adjustOrdersInternal(currentPrice float64, allo
 	logger.Info("📊 [订单配额] 阈值:%d, 当前订单:%d(开仓:%d/%d 平仓保护:%d/%d, BUY:%d SELL:%d), 剩余:%d, 平仓候选:%d, 新增平仓:%d, 新增开仓:%d",
 		threshold, currentOrderCount, currentEntryOrderCount, entryQuotaLimit, currentExitOrderCount, exitQuotaLimit, currentBuyOrderCount, currentSellOrderCount, remainingOrders, len(exitCandidates), exitOrdersToCreate, entryOrdersToCreate)
 
+	riskGuard := spm.entryRiskGuard
+	riskSnapshot := spm.gridRiskSnapshotLocked(currentPrice)
 	// 下单是网络 I/O，不能持有全局锁。槽位已经标记为 PENDING，结果回写依赖槽位锁。
 	spm.mu.Unlock()
+
+	if riskGuard != nil && len(ordersToPlace) > 0 {
+		entryRiskOrders := spm.toGridRiskEntryOrders(ordersToPlace)
+		if len(entryRiskOrders) > 0 {
+			decision := riskGuard.CheckEntryOrders(context.Background(), entryRiskOrders, currentPrice, riskSnapshot)
+			if !decision.Allowed {
+				logger.Warn("⛔ [合约风控拒绝新开仓] 原因: %s；本轮只提交 reduce-only 平仓保护单，阻止开仓单=%d",
+					strings.Join(decision.Reasons, "; "), len(entryRiskOrders))
+				ordersToPlace = spm.filterReduceOnlyOrdersAndReleaseEntries(ordersToPlace)
+				spm.CancelEntryOrders()
+			}
+		}
+	}
 
 	// 执行下单
 	if len(ordersToPlace) > 0 {
@@ -3259,6 +3291,84 @@ func (spm *SuperPositionManager) EstimateUnrealizedPNL(markPrice float64) float6
 		return true
 	})
 	return total
+}
+
+func (spm *SuperPositionManager) GridRiskSnapshot(markPrice float64) safety.GridRiskSnapshot {
+	spm.mu.RLock()
+	defer spm.mu.RUnlock()
+	return spm.gridRiskSnapshotLocked(markPrice)
+}
+
+func (spm *SuperPositionManager) gridRiskSnapshotLocked(markPrice float64) safety.GridRiskSnapshot {
+	if markPrice <= 0 {
+		if lastPrice, ok := spm.lastMarketPrice.Load().(float64); ok && lastPrice > 0 {
+			markPrice = lastPrice
+		}
+	}
+	var snapshot safety.GridRiskSnapshot
+	spm.slots.Range(func(key, value interface{}) bool {
+		slot := value.(*InventorySlot)
+		slot.mu.RLock()
+		defer slot.mu.RUnlock()
+		if slot.PositionStatus != PositionStatusFilled || slot.PositionQty <= 0 {
+			return true
+		}
+		snapshot.FilledLayers++
+		entryPrice := spm.slotEntryPrice(slot)
+		notionalPrice := firstPositiveFloat(markPrice, entryPrice)
+		snapshot.TotalNotional += math.Abs(slot.PositionQty * notionalPrice)
+		if markPrice > 0 {
+			if slot.BookSide == BookSideShort {
+				snapshot.UnrealizedPNL += (entryPrice - markPrice) * slot.PositionQty
+			} else {
+				snapshot.UnrealizedPNL += (markPrice - entryPrice) * slot.PositionQty
+			}
+		}
+		return true
+	})
+	return snapshot
+}
+
+func (spm *SuperPositionManager) toGridRiskEntryOrders(orders []*OrderRequest) []safety.GridRiskOrder {
+	riskOrders := make([]safety.GridRiskOrder, 0, len(orders))
+	for _, order := range orders {
+		if order == nil || order.ReduceOnly {
+			continue
+		}
+		riskOrders = append(riskOrders, safety.GridRiskOrder{
+			Symbol:     order.Symbol,
+			Side:       order.Side,
+			Price:      order.Price,
+			Quantity:   order.Quantity,
+			ReduceOnly: order.ReduceOnly,
+		})
+	}
+	return riskOrders
+}
+
+func (spm *SuperPositionManager) filterReduceOnlyOrdersAndReleaseEntries(orders []*OrderRequest) []*OrderRequest {
+	filtered := make([]*OrderRequest, 0, len(orders))
+	for _, req := range orders {
+		if req == nil {
+			continue
+		}
+		if req.ReduceOnly {
+			filtered = append(filtered, req)
+			continue
+		}
+		price, _, bookSide, valid := spm.parseClientOrderID(req.ClientOrderID)
+		if !valid {
+			continue
+		}
+		slot := spm.getOrCreateSlot(price, bookSide)
+		slot.mu.Lock()
+		if slot.ClientOID == req.ClientOrderID && slot.SlotStatus == SlotStatusPending {
+			slot.SlotStatus = SlotStatusFree
+			clearSlotOrderTracking(slot, OrderStatusNotPlaced)
+		}
+		slot.mu.Unlock()
+	}
+	return filtered
 }
 
 // GetReconcileCount 获取对账次数（IPositionManager 接口方法，供 Reconciler 使用）

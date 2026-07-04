@@ -65,20 +65,22 @@ type Order struct {
 }
 
 type Position struct {
-	Symbol           string
-	Size             float64
-	EntryPrice       float64
-	MarkPrice        float64
-	UnrealizedPNL    float64
-	HasUnrealizedPNL bool
-	RealizedPNL      float64
-	HasRealizedPNL   bool
-	ClosedPNL        float64
-	FundingFee       float64
-	TradingFee       float64
-	Leverage         int
-	MarginType       string
-	IsolatedMargin   float64
+	Symbol              string
+	Size                float64
+	EntryPrice          float64
+	MarkPrice           float64
+	UnrealizedPNL       float64
+	HasUnrealizedPNL    bool
+	RealizedPNL         float64
+	HasRealizedPNL      bool
+	ClosedPNL           float64
+	FundingFee          float64
+	TradingFee          float64
+	Leverage            int
+	MarginType          string
+	IsolatedMargin      float64
+	LiquidationPrice    float64
+	HasLiquidationPrice bool
 }
 
 type Account struct {
@@ -919,6 +921,7 @@ func (b *BitgetAdapter) GetPositions(ctx context.Context, symbol string) ([]*Pos
 		entryPrice, _ := strconv.ParseFloat(firstNonEmpty(item.AverageOpenPrice, item.OpenPriceAvg), 64)
 		markPrice, _ := strconv.ParseFloat(item.MarkPrice, 64)
 		unrealizedPNL, _ := strconv.ParseFloat(item.UnrealizedPL, 64)
+		liquidationPrice, _ := strconv.ParseFloat(item.LiquidationPrice, 64)
 		closedPNL, _ := strconv.ParseFloat(item.AchievedProfits, 64)
 		fundingFee, _ := strconv.ParseFloat(item.TotalFee, 64)
 		deductedFee, _ := strconv.ParseFloat(item.DeductedFee, 64)
@@ -934,20 +937,22 @@ func (b *BitgetAdapter) GetPositions(ctx context.Context, symbol string) ([]*Pos
 		}
 
 		positions = append(positions, &Position{
-			Symbol:           item.Symbol,
-			Size:             size,
-			EntryPrice:       entryPrice,
-			MarkPrice:        markPrice,
-			UnrealizedPNL:    unrealizedPNL,
-			HasUnrealizedPNL: true,
-			RealizedPNL:      realizedPNL,
-			HasRealizedPNL:   item.AchievedProfits != "" || item.TotalFee != "" || item.DeductedFee != "",
-			ClosedPNL:        closedPNL,
-			FundingFee:       fundingFee,
-			TradingFee:       tradingFee,
-			Leverage:         leverage,
-			MarginType:       item.MarginMode,
-			IsolatedMargin:   margin,
+			Symbol:              item.Symbol,
+			Size:                size,
+			EntryPrice:          entryPrice,
+			MarkPrice:           markPrice,
+			UnrealizedPNL:       unrealizedPNL,
+			HasUnrealizedPNL:    true,
+			RealizedPNL:         realizedPNL,
+			HasRealizedPNL:      item.AchievedProfits != "" || item.TotalFee != "" || item.DeductedFee != "",
+			ClosedPNL:           closedPNL,
+			FundingFee:          fundingFee,
+			TradingFee:          tradingFee,
+			Leverage:            leverage,
+			MarginType:          item.MarginMode,
+			IsolatedMargin:      margin,
+			LiquidationPrice:    liquidationPrice,
+			HasLiquidationPrice: liquidationPrice > 0,
 		})
 	}
 
