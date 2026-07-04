@@ -371,6 +371,8 @@ func runTrader(configPath string) {
 
 	// === 新增：初始化风控监视器 ===
 	riskMonitor := safety.NewRiskMonitor(cfg, ex)
+	gridRiskGuard := safety.NewGridRiskGuard(cfg, ex)
+	superPositionManager.SetEntryRiskGuard(gridRiskGuard)
 
 	// === 创建对账器（从仓位管理器剖离） ===
 	reconciler := safety.NewReconciler(cfg, exchangeAdapter, superPositionManager)
@@ -434,7 +436,7 @@ func runTrader(configPath string) {
 					if !acceptingAdjust.Load() {
 						return
 					}
-					if riskMonitor.IsTriggered() {
+					if riskMonitor.IsTriggered() || gridRiskGuard.IsTriggered() {
 						return
 					}
 					if !priceMonitor.IsPriceFresh(maxTradePriceAge) {
@@ -607,13 +609,20 @@ func runTrader(configPath string) {
 
 		for priceEvent := range priceCh {
 			runProtected("价格驱动调单事件", func() {
+				if cfg.ContractRisk.Enabled {
+					gridRiskGuard.Refresh(context.Background(), priceEvent.NewPrice, superPositionManager.GridRiskSnapshot(priceEvent.NewPrice))
+				}
 				// === 风控检查：触发时撤销所有开仓单并暂停交易 ===
-				isTriggered := riskMonitor.IsTriggered()
+				isTriggered := riskMonitor.IsTriggered() || gridRiskGuard.IsTriggered()
 
 				if isTriggered {
 					// 检测状态切换：从未触发 -> 触发（首次触发）
 					if !lastTriggered {
-						logger.Warn("🚨 [风控触发] 市场异常，正在撤销所有开仓单并暂停交易...")
+						reason := "市场异常"
+						if gridRiskGuard.IsTriggered() {
+							reason = "合约硬风控: " + gridRiskGuard.LastReason()
+						}
+						logger.Warn("🚨 [风控触发] %s，正在撤销所有开仓单并暂停新开仓；reduce-only 平仓保护单将保留", reason)
 						superPositionManager.CancelEntryOrders()
 						lastTriggered = true
 					}
@@ -623,7 +632,7 @@ func runTrader(configPath string) {
 
 				// 检测状态切换：从触发 -> 未触发（风控解除）
 				if lastTriggered {
-					logger.Info("✅ [风控解除] 市场恢复正常，恢复自动交易")
+					logger.Info("✅ [风控解除] 市场/合约硬风控恢复正常，恢复自动交易")
 					lastTriggered = false
 					lastGridAdjustPrice = nearestGridPrice(priceEvent.NewPrice, priceAnchor, priceInterval, priceDecimals)
 					scheduleAdjust("risk-recovered", true)
