@@ -57,6 +57,20 @@ type Config struct {
 		RecoveryThreshold int      `yaml:"recovery_threshold" json:"recovery_threshold"` // 恢复交易所需的正常币种数量，默认3
 	} `yaml:"risk_control" json:"risk_control"`
 
+	// 合约网格硬风控配置（账户/仓位维度，不包含市场预测）
+	ContractRisk struct {
+		Enabled               bool    `yaml:"enabled" json:"enabled"`
+		MaxTotalNotional      float64 `yaml:"max_total_notional" json:"max_total_notional"`
+		MaxPositionLayers     int     `yaml:"max_position_layers" json:"max_position_layers"`
+		MaxMarginUsagePct     float64 `yaml:"max_margin_usage_pct" json:"max_margin_usage_pct"`
+		MaxUnrealizedLossPct  float64 `yaml:"max_unrealized_loss_pct" json:"max_unrealized_loss_pct"`
+		MaxAccountDrawdownPct float64 `yaml:"max_account_drawdown_pct" json:"max_account_drawdown_pct"`
+		LiquidationGuard      struct {
+			Enabled        bool    `yaml:"enabled" json:"enabled"`
+			MinDistancePct float64 `yaml:"min_distance_pct" json:"min_distance_pct"`
+		} `yaml:"liquidation_guard" json:"liquidation_guard"`
+	} `yaml:"contract_risk" json:"contract_risk"`
+
 	// 时间间隔配置（单位：秒，除非特别说明）
 	Timing struct {
 		// WebSocket相关
@@ -364,6 +378,39 @@ func (c *Config) Validate() error {
 	}
 	if c.RiskControl.RecoveryThreshold > monitorCount {
 		c.RiskControl.RecoveryThreshold = monitorCount // 最大为监控币种数量
+	}
+
+	// 合约网格硬风控默认值。enabled 需要显式开启；max_total_notional 和
+	// max_position_layers 保持 0=不限制，避免老配置升级后被隐式窗口推导过度限制。
+	if c.ContractRisk.MaxTotalNotional < 0 {
+		return fmt.Errorf("contract_risk.max_total_notional 不能为负数")
+	}
+	if c.ContractRisk.MaxPositionLayers < 0 {
+		return fmt.Errorf("contract_risk.max_position_layers 不能为负数")
+	}
+	if c.ContractRisk.MaxMarginUsagePct <= 0 {
+		c.ContractRisk.MaxMarginUsagePct = 70
+	}
+	if c.ContractRisk.MaxUnrealizedLossPct <= 0 {
+		c.ContractRisk.MaxUnrealizedLossPct = 20
+	}
+	if c.ContractRisk.MaxAccountDrawdownPct <= 0 {
+		c.ContractRisk.MaxAccountDrawdownPct = 25
+	}
+	if c.ContractRisk.MaxMarginUsagePct > 100 {
+		return fmt.Errorf("contract_risk.max_margin_usage_pct 不能大于100")
+	}
+	if c.ContractRisk.MaxUnrealizedLossPct > 100 {
+		return fmt.Errorf("contract_risk.max_unrealized_loss_pct 不能大于100")
+	}
+	if c.ContractRisk.MaxAccountDrawdownPct > 100 {
+		return fmt.Errorf("contract_risk.max_account_drawdown_pct 不能大于100")
+	}
+	if c.ContractRisk.LiquidationGuard.MinDistancePct <= 0 {
+		c.ContractRisk.LiquidationGuard.MinDistancePct = 5
+	}
+	if c.ContractRisk.LiquidationGuard.MinDistancePct > 100 {
+		return fmt.Errorf("contract_risk.liquidation_guard.min_distance_pct 不能大于100")
 	}
 
 	return nil
