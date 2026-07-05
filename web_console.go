@@ -282,6 +282,11 @@ const (
 	hardcodedRiskVolumeMultiplier  = 3.0
 	hardcodedRiskAverageWindow     = 20
 	hardcodedRiskRecoveryThreshold = 3
+	hardcodedContractRiskEnabled   = true
+	hardcodedMaxMarginUsagePct     = 70.0
+	hardcodedMaxUnrealizedLossPct  = 20.0
+	hardcodedMaxAccountDrawdownPct = 25.0
+	hardcodedLiquidationGuardPct   = 5.0
 	hardcodedSystemLogLevel        = "INFO"
 	hardcodedSystemCancelOnExit    = true
 	hardcodedWSReconnectDelay      = 5
@@ -2170,6 +2175,12 @@ func applyHardcodedRobotDefaults(cfg *config.Config) error {
 	cfg.RiskControl.VolumeMultiplier = hardcodedRiskVolumeMultiplier
 	cfg.RiskControl.AverageWindow = hardcodedRiskAverageWindow
 	cfg.RiskControl.RecoveryThreshold = hardcodedRiskRecoveryThreshold
+	cfg.ContractRisk.Enabled = hardcodedContractRiskEnabled
+	cfg.ContractRisk.MaxMarginUsagePct = hardcodedMaxMarginUsagePct
+	cfg.ContractRisk.MaxUnrealizedLossPct = hardcodedMaxUnrealizedLossPct
+	cfg.ContractRisk.MaxAccountDrawdownPct = hardcodedMaxAccountDrawdownPct
+	cfg.ContractRisk.LiquidationGuard.Enabled = true
+	cfg.ContractRisk.LiquidationGuard.MinDistancePct = hardcodedLiquidationGuardPct
 
 	cfg.System.LogLevel = hardcodedSystemLogLevel
 	cfg.System.CancelOnExit = hardcodedSystemCancelOnExit

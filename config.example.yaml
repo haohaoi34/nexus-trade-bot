@@ -136,3 +136,15 @@ risk_control:
   
   # 触发条件：当前价格 < 移动均价 且 成交量 > 均值×倍数
   # 解除条件：至少 recovery_threshold 个币种满足（当前价格 > 移动均价 且 成交量 < 均值×倍数）
+
+# 合约网格硬风控配置（账户/仓位维度；不做预测、不自动平仓/减仓）
+contract_risk:
+  enabled: true
+  max_total_notional: 0        # 最大累计名义仓位；0 表示不限制
+  max_position_layers: 0       # 最大成交网格层数；0 表示不限制
+  max_margin_usage_pct: 70     # 最大保证金使用率%
+  max_unrealized_loss_pct: 20  # 单 bot 最大浮亏%
+  max_account_drawdown_pct: 25 # 账户运行期最大回撤%
+  liquidation_guard:
+    enabled: true
+    min_distance_pct: 5        # 标记价格距离强平价小于该百分比时暂停新开仓；无法获取强平价时 fail-open 并打印 warning
